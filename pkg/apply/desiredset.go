@@ -7,11 +7,15 @@ import (
 	"github.com/rancher/wrangler/pkg/kv"
 	"github.com/rancher/wrangler/pkg/merr"
 	"github.com/rancher/wrangler/pkg/objectset"
+	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/cache"
 )
+
+// Indexer name added for cached types
+const byHash = "byHash"
 
 type patchKey struct {
 	schema.GroupVersionKind
@@ -160,7 +164,21 @@ func (o desiredSet) WithCacheTypes(igs ...InformerGetter) Apply {
 	}
 
 	for _, ig := range igs {
-		pruneTypes[ig.GroupVersionKind()] = ig.Informer()
+		informer := ig.Informer()
+		informer.AddIndexers(map[string]cache.IndexFunc{
+			byHash: func(obj interface{}) ([]string, error) {
+				metadata, err := meta.Accessor(obj)
+				if err != nil {
+					return nil, err
+				}
+				labels := metadata.GetLabels()
+				if labels == nil || labels[LabelHash] == "" {
+					return nil, nil
+				}
+				return []string{labels[LabelHash]}, nil
+			},
+		})
+		pruneTypes[ig.GroupVersionKind()] = informer
 	}
 
 	o.pruneTypes = pruneTypes

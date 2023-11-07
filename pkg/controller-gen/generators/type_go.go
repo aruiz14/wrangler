@@ -333,6 +333,7 @@ func Register{{.type}}GeneratingHandler(ctx context.Context, controller {{.type}
 		apply:                            apply,
 		name:                             name,
 		gvk:                              controller.GroupVersionKind(),
+		seen:                             make(map[string]struct{}),
 	}
 	if opts != nil {
 		statusHandler.opts = *opts
@@ -392,6 +393,7 @@ type {{.lowerName}}GeneratingHandler struct {
 	opts  generic.GeneratingHandlerOptions
 	gvk   schema.GroupVersionKind
 	name  string
+	seen  map[string]struct{}
 }
 
 func (a *{{.lowerName}}GeneratingHandler) Remove(key string, obj *{{.version}}.{{.type}}) (*{{.version}}.{{.type}}, error) {
@@ -402,6 +404,7 @@ func (a *{{.lowerName}}GeneratingHandler) Remove(key string, obj *{{.version}}.{
 	obj = &{{.version}}.{{.type}}{}
 	obj.Namespace, obj.Name = kv.RSplit(key, "/")
 	obj.SetGroupVersionKind(a.gvk)
+	delete(a.seen, key)
 
 	return nil, generic.ConfigureApplyForObject(a.apply, obj, &a.opts).
 		WithOwner(obj).
@@ -415,7 +418,7 @@ func (a *{{.lowerName}}GeneratingHandler) Handle(obj *{{.version}}.{{.type}}, st
 	}
 
 	objs, newStatus, err := a.{{.type}}GeneratingHandler(obj, status)
-	if err != nil {
+	if err != nil || !a.shouldApply(obj, newStatus) {
 		return newStatus, err
 	}
 
@@ -423,6 +426,15 @@ func (a *{{.lowerName}}GeneratingHandler) Handle(obj *{{.version}}.{{.type}}, st
 		WithOwner(obj).
 		WithSetID(a.name).
 		ApplyObjects(objs...)
+}
+
+func (a *{{.lowerName}}GeneratingHandler) shouldApply(obj *{{.version}}.{{.type}}, status {{.version}}.{{.statusType}}) bool {
+	key := {{ if .namespaced}}obj.Namespace + "/" + {{end}}obj.Name
+	if _, seen := a.seen[key]; !seen {
+		a.seen[key] = struct{}{}
+		return true
+	}
+	return !equality.Semantic.DeepEqual(obj.Status, status)
 }
 {{- end }}
 `

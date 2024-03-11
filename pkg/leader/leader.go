@@ -18,10 +18,12 @@ const devModeEnvKey = "CATTLE_DEV_MODE"
 const leaseDurationEnvKey = "CATTLE_ELECTION_LEASE_DURATION"
 const renewDeadlineEnvKey = "CATTLE_ELECTION_RENEW_DEADLINE"
 const retryPeriodEnvKey = "CATTLE_ELECTION_RETRY_PERIOD"
+const resourceLockEnvKey = "CATTLE_ELECTION_RESOURCE_LOCK"
 
 const defaultLeaseDuration = 45 * time.Second
 const defaultRenewDeadline = 30 * time.Second
 const defaultRetryPeriod = 2 * time.Second
+const defaultResourceLock = resourcelock.LeasesResourceLock
 
 const developmentLeaseDuration = 45 * time.Hour
 const developmentRenewDeadline = 30 * time.Hour
@@ -44,7 +46,12 @@ func run(ctx context.Context, namespace, name string, client kubernetes.Interfac
 		return err
 	}
 
-	rl, err := resourcelock.New(resourcelock.LeasesResourceLock,
+	resourceLock := defaultResourceLock
+	if v := os.Getenv(resourceLockEnvKey); v != "" {
+		resourceLock = v
+	}
+
+	rl, err := resourcelock.New(resourceLock,
 		namespace,
 		name,
 		client.CoreV1(),

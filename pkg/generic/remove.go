@@ -5,6 +5,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+const (
+	// resources marked with this annotation will not be appended with a finalizer
+	skipFinalizerAnnotation = "exp.wrangler.cattle.io/no-finalizers"
+)
+
 var (
 	finalizerKey = "wrangler.cattle.io/"
 )
@@ -112,6 +117,11 @@ func (o *objectLifecycleAdapter) addFinalizer(obj runtime.Object) (runtime.Objec
 	metadata, err := meta.Accessor(obj)
 	if err != nil {
 		return nil, err
+	}
+
+	// Skip adding finalizers to resources marked with a specific annotation
+	if annotations := metadata.GetAnnotations(); annotations != nil && annotations[skipFinalizerAnnotation] != "" {
+		return nil, nil
 	}
 
 	metadata.SetFinalizers(append(metadata.GetFinalizers(), o.constructFinalizerKey()))
